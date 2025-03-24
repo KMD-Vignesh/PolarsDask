@@ -1,7 +1,14 @@
 import re
 
-def generate_sql_query(filter_string: str, table_name: str = "quote") -> str:
-    """Generates a full SQL query with SELECT * FROM <table> WHERE <conditions>."""
+def generate_sql_query(filter_string: str) -> str:
+    """Generates a full SQL query by automatically detecting the table name."""
+    if not filter_string or filter_string.strip() == "":
+        return ""
+
+    # Extract the table name from the first condition
+    first_condition = filter_string.split(",")[0].strip()
+    table_name = first_condition.split(".")[0].strip()
+
     where_clause = generate_sql_where(filter_string)
     return f"SELECT * FROM {table_name} {where_clause}".strip()
 
@@ -18,11 +25,11 @@ def generate_sql_where(filter_string: str) -> str:
             continue
             
         table_col, operator, values = parse_condition(condition)
-        
+
         if "." not in table_col:
             raise ValueError(f"Invalid column format: {table_col}")
 
-        table, column = table_col.split(".", 1)  # Handle `table.column`
+        _, column = table_col.split(".", 1)  # Extract column name
 
         # Handle different operators
         if operator == "=":
