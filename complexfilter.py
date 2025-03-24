@@ -6,7 +6,6 @@ def apply_complex_filter(df: pl.DataFrame, filter_string: str) -> pl.DataFrame:
         return df
     
     conditions = [cond.strip() for cond in filter_string.split(",")]
-    
     filter_expressions = []
     
     for condition in conditions:
@@ -14,31 +13,38 @@ def apply_complex_filter(df: pl.DataFrame, filter_string: str) -> pl.DataFrame:
             continue
             
         table_col, operator, values = parse_condition(condition)
-        
         table, column = table_col.split(".")
+        
+        # Get column dtype to determine how to handle the comparison
+        col_dtype = df[column].dtype
         
         if operator == "=":
             if "|" in values:
                 value_list = values.split("|")
+                if col_dtype.is_numeric():
+                    value_list = [float(v) if v != "" else None for v in value_list]
                 expr = pl.col(column).is_in(value_list)
             elif "*" in values:
-                if values.startswith("*") and values.endswith("*"):
-                    expr = pl.col(column).str.contains(values[1:-1])
-                elif values.startswith("*"):
-                    expr = pl.col(column).str.ends_with(values[1:])
-                elif values.endswith("*"):
-                    expr = pl.col(column).str.starts_with(values[:-1])
-                else:
-                    expr = pl.col(column) == values
+                expr = handle_wildcard(column, values)
             else:
-                expr = pl.col(column) == values
+                if col_dtype.is_numeric():
+                    value = float(values) if values != "" else None
+                else:
+                    value = values
+                expr = pl.col(column) == value
                 
         elif operator == "<>":
             if "|" in values:
                 value_list = values.split("|")
+                if col_dtype.is_numeric():
+                    value_list = [float(v) if v != "" else None for v in value_list]
                 expr = ~pl.col(column).is_in(value_list)
             else:
-                expr = pl.col(column) != values
+                if col_dtype.is_numeric():
+                    value = float(values) if values != "" else None
+                else:
+                    value = values
+                expr = pl.col(column) != value
                 
         elif operator == ">":
             expr = pl.col(column) > float(values)
@@ -57,6 +63,16 @@ def parse_condition(condition: str) -> tuple[str, str, str]:
             table_col, values = condition.split(op, 1)
             return table_col.strip(), op, values.strip()
     raise ValueError(f"Invalid condition format: {condition}")
+
+def handle_wildcard(column: str, values: str) -> pl.Expr:
+    if values.startswith("*") and values.endswith("*"):
+        return pl.col(column).str.contains(values[1:-1])
+    elif values.startswith("*"):
+        return pl.col(column).str.ends_with(values[1:])
+    elif values.endswith("*"):
+        return pl.col(column).str.starts_with(values[:-1])
+    else:
+        return pl.col(column) == values
 
 if __name__ == "__main__":
     df = pl.DataFrame({
